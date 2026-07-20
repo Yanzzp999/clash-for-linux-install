@@ -1,45 +1,27 @@
 #!/usr/bin/env bash
 
-. scripts/cmd/clashctl.sh
-. scripts/preflight.sh
+CLASHCTL_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+. "$CLASHCTL_SRC/scripts/preflight.sh"
 
-_valid
-_parse_args "$@"
+valid_env
+parse_args "$@"
 
-_prepare_zip
-_detect_init
+_okcat "安装内核：$CLASHCTL_KERNEL"
+_okcat '📦' "安装路径：$CLASHCTL_HOME"
 
-_okcat "安装内核：$KERNEL_NAME by ${INIT_TYPE}"
-_okcat '📦' "安装路径：$CLASH_BASE_DIR"
+prepare_zip
 
-_valid_config "$RESOURCES_CONFIG_BASE" || {
-    [ -z "$CLASH_CONFIG_URL" ] && {
-        echo -n "$(_okcat '✈️ ' '输入订阅：')"
-        read -r CLASH_CONFIG_URL
-    }
-    _okcat '⏳' '正在下载...'
-    _download_config "$RESOURCES_CONFIG_BASE" "$CLASH_CONFIG_URL" || _error_quit "下载失败: 请将配置内容写入 $RESOURCES_CONFIG_BASE 后重新安装"
-    _valid_config "$RESOURCES_CONFIG_BASE" || _error_quit "订阅无效，请检查：
-    原始订阅：${RESOURCES_CONFIG_BASE}.raw
-    转换订阅：$RESOURCES_CONFIG_BASE
-    转换日志：$BIN_SUBCONVERTER_LOG"
-}
-_okcat '✅' '配置可用'
+install_service
+install_clashctl
 
-/bin/cp -rf . "$CLASH_BASE_DIR"
-_set_envs
-
-_install_service
-_apply_rc
-
-"$BIN_YQ" -i ".secret = \"$(_get_random_val)\"" "$CLASH_CONFIG_MIXIN" && _merge_config
+_merge_config
 _detect_proxy_port
 clashui
+[ -z "$(_get_secret)" ] && clashsecret "$(_get_random_val)" >/dev/null
 clashsecret
 
-_is_regular_sudo && chown -R "$SUDO_USER" "$CLASH_BASE_DIR"
-
-clashctl
-clashon
-_okcat '🎉' 'enjoy 🎉'
-_quit
+_valid_config "$CLASH_CONFIG_BASE" && {
+    CLASHCTL_SUB_URL="file://$CLASH_CONFIG_BASE"
+}
+clashsub add --use "$CLASHCTL_SUB_URL"
+_okcat '🎉' "请执行 source ~/.bashrc 为当前 SHELL 加载 clashctl 命令"
